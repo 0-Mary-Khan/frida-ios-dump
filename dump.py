@@ -1,8 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # Author : AloneMonkey
 # blog: www.alonemonkey.com
+
+
+# Fork by omarykhan
+
 
 from __future__ import print_function
 from __future__ import unicode_literals
@@ -12,13 +16,11 @@ import frida
 import threading
 import os
 import shutil
-import time
 import argparse
 import tempfile
 import subprocess
 import re
 import paramiko
-from paramiko import SSHClient
 from scp import SCPClient
 from tqdm import tqdm
 import traceback
@@ -42,14 +44,6 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 
 DUMP_JS = os.path.join(script_dir, 'dump.js')
 
-User = 'root'
-Password = 'alpine'
-Host = 'localhost'
-Port = 2222
-KeyFileName = None
-
-FORWARD_PORT = 27042
-
 TEMP_DIR = tempfile.gettempdir()
 PAYLOAD_DIR = 'Payload'
 PAYLOAD_PATH = os.path.join(TEMP_DIR, PAYLOAD_DIR)
@@ -63,6 +57,7 @@ exitLock = threading.Lock()
 exitFlag = False
 
 g_verbose = True
+
 
 class ForwardServer(SocketServer.ThreadingTCPServer):
     daemon_threads = True
@@ -117,7 +112,7 @@ class Handler(SocketServer.BaseRequestHandler):
         verbose("Tunnel closed from %r" % (peername,))
 
 
-def forward_tunnel(local_port, remote_host, remote_port, transport):
+def forward_tunnel(local_host, local_port, remote_host, remote_port, transport):
     # this is a little convoluted, but lets me configure things for the Handler
     # object.  (SocketServer doesn't give Handlers any way to access the outer
     # server normally.)
@@ -130,8 +125,8 @@ def forward_tunnel(local_port, remote_host, remote_port, transport):
 
     global exitFlag
 
-    forwardServer = ForwardServer(("127.0.0.1", local_port), SubHander)
-    
+    forwardServer = ForwardServer((local_host, local_port), SubHander)
+
     forwardServer.timeout = 10
 
     while True:
@@ -145,17 +140,19 @@ def forward_tunnel(local_port, remote_host, remote_port, transport):
             break
 
         exitLock.release()
-    
+
     exitLock.release()
+
 
 def verbose(s):
     if g_verbose:
         print(s)
 
 
-def get_ssh_iphone():
+def get_ssh_iphone(fridaSocket):
 
     device_manager = frida.get_device_manager()
+
     changed = threading.Event()
 
     def on_changed():
@@ -163,33 +160,7 @@ def get_ssh_iphone():
 
     device_manager.on('changed', on_changed)
 
-    device = device_manager.add_remote_device("127.0.0.1:27042")
-
-    device_manager.off('changed', on_changed)
-
-    return device
-
-
-def get_usb_iphone():
-    Type = 'usb'
-    if int(frida.__version__.split('.')[0]) < 12:
-        Type = 'tether'
-    device_manager = frida.get_device_manager()
-    changed = threading.Event()
-
-    def on_changed():
-        changed.set()
-
-    device_manager.on('changed', on_changed)
-
-    device = None
-    while device is None:
-        devices = [dev for dev in device_manager.enumerate_devices() if dev.type == Type]
-        if len(devices) == 0:
-            print('Waiting for USB device...')
-            changed.wait()
-        else:
-            device = devices[0]
+    device = device_manager.add_remote_device(fridaSocket)
 
     device_manager.off('changed', on_changed)
 
@@ -210,15 +181,17 @@ def generate_ipa(path, display_name):
                 shutil.move(from_dir, to_dir)
 
         target_dir = './' + PAYLOAD_DIR
-        zip_args = ('zip', '-qr', os.path.join(os.getcwd(), ipa_filename), target_dir)
+        zip_args = ('zip', '-qr', os.path.join(os.getcwd(),
+                    ipa_filename), target_dir)
         subprocess.check_call(zip_args, cwd=TEMP_DIR)
         shutil.rmtree(PAYLOAD_PATH)
     except Exception as e:
         print(e)
         finished.set()
 
+
 def on_message(message, data):
-    t = tqdm(unit='B',unit_scale=True,unit_divisor=1024,miniters=1)
+    t = tqdm(unit='B', unit_scale=True, unit_divisor=1024, miniters=1)
     last_sent = [0]
 
     def progress(filename, size, sent):
@@ -240,7 +213,7 @@ def on_message(message, data):
             scp_from = dump_path
             scp_to = PAYLOAD_PATH + '/'
 
-            with SCPClient(ssh.get_transport(), progress = progress, socket_timeout = 60) as scp:
+            with SCPClient(ssh.get_transport(), progress=progress, socket_timeout=60) as scp:
                 scp.get(scp_from, scp_to)
 
             chmod_dir = os.path.join(PAYLOAD_PATH, os.path.basename(dump_path))
@@ -258,7 +231,7 @@ def on_message(message, data):
 
             scp_from = app_path
             scp_to = PAYLOAD_PATH + '/'
-            with SCPClient(ssh.get_transport(), progress = progress, socket_timeout = 60) as scp:
+            with SCPClient(ssh.get_transport(), progress=progress, socket_timeout=60) as scp:
                 scp.get(scp_from, scp_to, recursive=True)
 
             chmod_dir = os.path.join(PAYLOAD_PATH, os.path.basename(app_path))
@@ -273,6 +246,7 @@ def on_message(message, data):
         if 'done' in payload:
             finished.set()
     t.close()
+
 
 def compare_applications(a, b):
     a_is_running = a.pid != 0
@@ -331,9 +305,11 @@ def list_applications(device):
     applications = get_applications(device)
 
     if len(applications) > 0:
-        pid_column_width = max(map(lambda app: len('{}'.format(app.pid)), applications))
+        pid_column_width = max(
+            map(lambda app: len('{}'.format(app.pid)), applications))
         name_column_width = max(map(lambda app: len(app.name), applications))
-        identifier_column_width = max(map(lambda app: len(app.identifier), applications))
+        identifier_column_width = max(
+            map(lambda app: len(app.identifier), applications))
     else:
         pid_column_width = 0
         name_column_width = 0
@@ -342,14 +318,16 @@ def list_applications(device):
     header_format = '%' + str(pid_column_width) + 's  ' + '%-' + str(name_column_width) + 's  ' + '%-' + str(
         identifier_column_width) + 's'
     print(header_format % ('PID', 'Name', 'Identifier'))
-    print('%s  %s  %s' % (pid_column_width * '-', name_column_width * '-', identifier_column_width * '-'))
+    print('%s  %s  %s' % (pid_column_width * '-',
+          name_column_width * '-', identifier_column_width * '-'))
     line_format = '%' + str(pid_column_width) + 's  ' + '%-' + str(name_column_width) + 's  ' + '%-' + str(
         identifier_column_width) + 's'
     for application in sorted(applications, key=cmp_to_key(compare_applications)):
         if application.pid == 0:
             print(line_format % ('-', application.name, application.identifier))
         else:
-            print(line_format % (application.pid, application.name, application.identifier))
+            print(line_format %
+                  (application.pid, application.name, application.identifier))
 
 
 def load_js_file(session, filename):
@@ -388,14 +366,11 @@ def open_target_app(device, name_or_bundleid):
             bundle_identifier = application.identifier
 
     try:
-        if not pid:
-            pid = device.spawn([bundle_identifier])
-            session = device.attach(pid)
-            device.resume(pid)
-        else:
-            session = device.attach(pid)
+        pid = device.spawn([bundle_identifier])
+        session = device.attach(pid)
+        device.resume(pid)
     except Exception as e:
-        print(e) 
+        print(e)
 
     return session, display_name, bundle_identifier
 
@@ -413,21 +388,128 @@ def start_dump(session, ipa_name):
         session.detach()
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='frida-ios-dump (by AloneMonkey v2.0)')
-    parser.add_argument('-l', '--list', dest='list_applications', action='store_true', help='List the installed apps')
-    parser.add_argument('-o', '--output', dest='output_ipa', help='Specify name of the decrypted IPA')
-    parser.add_argument('-H', '--host', dest='ssh_host', help='Specify SSH hostname')
-    parser.add_argument('-p', '--port', dest='ssh_port', help='Specify SSH port')
-    parser.add_argument('-u', '--user', dest='ssh_user', help='Specify SSH username')
-    parser.add_argument('-P', '--password', dest='ssh_password', help='Specify SSH password')
-    parser.add_argument('-K', '--key_filename', dest='ssh_key_filename', help='Specify SSH private key file path')
-    parser.add_argument('target', nargs='?', help='Bundle identifier or display name of the target app')
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(
+        description="frida-ios-dump (by AloneMonkey v2.0, forked by omarykhan)",
+    )
+
+    parser.add_argument(
+        "-A",
+        "--frida-host",
+        dest="fridaHost",
+        help="Specify Frida listening address",
+        required=False,
+        default="127.0.0.1",
+        type=str,
+    )
+
+    parser.add_argument(
+        "-L",
+        "--frida-port",
+        dest="fridaPort",
+        help="Specify Frida listening port",
+        required=False,
+        default=27042,
+        type=int,
+    )
+
+    parser.add_argument(
+        "-a",
+        "--lhost",
+        help="Specify forwarded address",
+        required=False,
+        default="127.0.0.1",
+        type=str,
+    )
+
+    parser.add_argument(
+        "-f",
+        "--lport",
+        help="Specify forwarded port",
+        required=False,
+        default=27042,
+        type=int,
+    )
+
+    parser.add_argument(
+        "-l",
+        "--list",
+        dest="list_applications",
+        action="store_true",
+        help="List the installed apps",
+        required=False,
+    )
+
+    parser.add_argument(
+        "-o",
+        "--output",
+        dest="output_ipa",
+        help="Specify name of the decrypted IPA",
+        required=False,
+    )
+
+    parser.add_argument(
+        "-H",
+        "--host",
+        dest="ssh_host",
+        help="Specify SSH hostname",
+        required=True,
+        type=str,
+    )
+
+    parser.add_argument(
+        "-p",
+        "--port",
+        dest="ssh_port",
+        help="Specify SSH port",
+        required=False,
+        default=22,
+        type=int,
+    )
+
+    parser.add_argument(
+        "-u",
+        "--user",
+        dest="ssh_user",
+        help="Specify SSH username (must be root)",
+        required=False,
+        default="root",
+        type=str,
+    )
+
+    parser.add_argument(
+        "-P",
+        "--password",
+        dest="ssh_password",
+        help="Specify SSH password",
+        required=False,
+    )
+
+    parser.add_argument(
+        "-K",
+        "--key_filename",
+        dest="ssh_key_filename",
+        help="Specify SSH private key file path",
+        required=False,
+    )
+
+    parser.add_argument(
+        "target",
+        nargs="?",
+        help="Bundle identifier or display name of the target app",
+    )
 
     args = parser.parse_args()
 
     exit_code = 0
     ssh = None
+
+    Password = None
+
+    KeyFileName = None
+
+    forwardThread = None
 
     if not len(sys.argv[1:]):
         parser.print_help()
@@ -435,13 +517,16 @@ if __name__ == '__main__':
 
     try:
 
+        forwardedSocket = f"{args.lhost}:{args.lport}"
+
         # update ssh args
-        if args.ssh_host:
-            Host = args.ssh_host
-        if args.ssh_port:
-            Port = int(args.ssh_port)
-        if args.ssh_user:
-            User = args.ssh_user
+
+        Host = args.ssh_host
+
+        Port = args.ssh_port
+
+        User = args.ssh_user
+
         if args.ssh_password:
             Password = args.ssh_password
         if args.ssh_key_filename:
@@ -449,24 +534,25 @@ if __name__ == '__main__':
 
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(Host, port=Port, username=User, password=Password, key_filename=KeyFileName)
+        ssh.connect(Host, port=Port, username=User,
+                    password=Password, key_filename=KeyFileName)
 
-        forwardThread = threading.Thread(target=forward_tunnel, args=(FORWARD_PORT, "127.0.0.1", FORWARD_PORT, ssh.get_transport(),))
+        forwardThread = threading.Thread(target=forward_tunnel, args=(
+            args.lhost, args.lport, args.fridaHost, args.fridaPort, ssh.get_transport(),))
 
         forwardThread.start()
 
-        # device = get_usb_iphone()
-
-        device = get_ssh_iphone()
+        device = get_ssh_iphone(forwardedSocket)
 
         if args.list_applications:
             list_applications(device)
         else:
             name_or_bundleid = args.target
             output_ipa = args.output_ipa
-            
+
             create_dir(PAYLOAD_PATH)
-            (session, display_name, bundle_identifier) = open_target_app(device, name_or_bundleid)
+            (session, display_name, bundle_identifier) = open_target_app(
+                device, name_or_bundleid)
             if output_ipa is None:
                 output_ipa = display_name
             output_ipa = re.sub('\.ipa$', '', output_ipa)
@@ -495,7 +581,7 @@ if __name__ == '__main__':
     if forwardThread:
 
         forwardThread.join()
-        
+
     if ssh:
         ssh.close()
 

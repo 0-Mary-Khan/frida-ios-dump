@@ -5,6 +5,7 @@ colorama
 cryptography
 enum34
 frida-tools
+frida
 idna
 ipaddress
 paramiko

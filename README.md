@@ -1,48 +1,42 @@
 # frida-ios-dump
-Pull a decrypted IPA from a jailbroken device
+Pull a decrypted IPA from a jailbroken device using SSH on Linux
 
 
 ## Usage
 
- 1. Install [frida](http://www.frida.re/) on device
- 2. `sudo pip install -r requirements.txt --upgrade`
- 3. Run usbmuxd/iproxy SSH forwarding over USB (Default 2222 -> 22). e.g. `iproxy 2222 22`
- 4. Run ./dump.py `Display name` or `Bundle identifier`
-
-For SSH/SCP make sure you have your public key added to the target device's ~/.ssh/authorized_keys file.
-
+ 1. Use Linux (or WSL).
+ 2. (Optionally) Enter into a virtual environment:
+```bash
+sudo apt install python3-venv
+python3 -m venv .venv
+source .venv/bin/activate
 ```
-./dump.py Aftenposten
-Start the target app Aftenposten
-Dumping Aftenposten to /var/folders/wn/9v1hs8ds6nv_xj7g95zxyl140000gn/T
-start dump /var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/AftenpostenApp
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/AFNetworking.framework/AFNetworking
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/ATInternet_iOS_ObjC_SDK.framework/ATInternet_iOS_ObjC_SDK
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/SPTEventCollector.framework/SPTEventCollector
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/SPiDSDK.framework/SPiDSDK
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftCore.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftCoreData.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftCoreGraphics.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftCoreImage.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftCoreLocation.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftDarwin.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftDispatch.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftFoundation.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftObjectiveC.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftQuartzCore.dylib
-start dump /private/var/containers/Bundle/Application/66423A80-0AFE-471C-BC9B-B571107D3C27/AftenpostenApp.app/Frameworks/libswiftUIKit.dylib
-Generating Aftenposten.ipa
-
-Done.
+ 3. Install requirements:
+```bash
+python3 -m pip install -r requirements.txt --upgrade
+```
+ 4. Enable Frida server on the device.
+ 5. Enable root SSH access to the device.
+ 6. Dump the app:
+```bash
+python3 dump.py -H '<ssh_host>' -K '<ssh_key>' '<app_name>|<app_identifier>'
 ```
 
-Congratulations!!! You've got a decrypted IPA file.
-
-Drag to [MonkeyDev](https://github.com/AloneMonkey/MonkeyDev), Happy hacking!
+## Example
+```bash
+python3 dump.py -H '192.168.0.100' -K 'id_rsa' 'sg.vp.UnCrackable1'
+Start the target app sg.vp.UnCrackable1
+Connected!  Tunnel open ('127.0.0.1', 36506) -> ('192.168.0.100', 22) -> ('127.0.0.1', 27042)
+Dumping UnCrackable1 to /tmp
+start dump /private/var/containers/Bundle/Application/FF2BFE6D-3B08-4E8B-BC1C-E6D89DC60A78/UnCrackable Level 1.app/UnCrackable Level 1
+UnCrackable Level 1.fid: 100%|███████████████████████████████████████████████████████████████████| 72.0k/72.0k [00:00<00:00, 317kB/s]
+AppIcon-176x76@2x~ipad.png: 415kB [00:01, 392kB/s]
+0.00B [00:00, ?B/s]Generating "UnCrackable1.ipa"
+```
 
 ## Support
 
-Python 2.x and 3.x
+Python 3.x
 
 
 ### issues
@@ -53,6 +47,4 @@ If the following error occurs:
 * lost connection
 * unexpected error while probing dyld of target process
 
-please open the application before dumping.
-
-
+Please retry or open the application before dumping.
